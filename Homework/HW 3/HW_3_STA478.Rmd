@@ -1,0 +1,117 @@
+---
+title: "HW 3"
+author: "Jared Brotamonte"
+date: "9/22/2023"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exercise 1
+```{r}
+library(ISLR2)
+data("Auto")
+library(ggplot2)
+```
+
+
+## (a)
+```{r}
+# Perform simple linear regression
+model <- lm(mpg ~ horsepower, data = Auto)
+
+# Print the summary of the regression results
+summary(model)
+```
+i. Yes, there is a relationship between the predictor "horsepower" and the response "mpg" given the p-value is "<2e-16"
+
+ii. The multiple R-squared value is 0.6059 thus this means that about 60.59% of the variance in "mpg" can be explained by the "horsepower" predictor. This indicates a moderate to strong relationship between the two.
+
+iii. The coefficient for "horsepower" is -0.157845. Since this is less than zero, it indicates a negative relationship between "horsepower" and "mpg" or in otherwords as "horsepower" increases by 1, "mpg" should decrease by about -0.157845.
+
+## (b)
+```{r}
+new_data <- data.frame(horsepower = 98)
+
+# Use the 'predict' function to make the prediction
+predicted_mpg <- predict(model, newdata = new_data)
+
+# Print the predicted 'mpg' value
+print(predicted_mpg)
+```
+
+## (c)
+```{r}
+# Create a scatterplot of mpg vs. horsepower
+plot(Auto$horsepower, Auto$mpg, xlab = "Horsepower", ylab = "MPG", main = "Scatterplot of MPG vs. Horsepower")
+
+# Add the least squares regression line
+abline(model, col = "red")
+```
+
+## (d)
+```{r}
+# Create diagnostic plots for the linear regression model
+par(mfrow = c(2, 2))  # Set up a 2x2 grid for the plots
+plot(model)
+```
+Looking at the residuals vs fitted graph, there is a slight curve to the graph thus meaning a more complex model might be better for the data.
+
+# Exersize 2
+```{r}
+set.seed(1)
+```
+
+## (a)
+```{r}
+X <- rnorm(100, mean = 0, sd = 1)
+```
+
+## (b)
+```{r}
+epsilon <- rnorm(100, mean = 0, sd = 0.25)
+```
+
+## (c)
+```{r}
+# Calculate Y based on the linear model
+Y <- -1 + 0.5 * X + epsilon
+
+# (i) Length of vector Y
+length_Y <- length(Y)
+
+# (ii) Values of beta
+beta_0 <- -1
+beta_1 <- 0.5
+```
+i.
+```{r}
+length_Y
+```
+ii.
+```{r}
+beta_0
+beta_1
+```
+
+## (d)
+```{r}
+# Create a scatterplot of X vs. Y
+plot(X, Y, main = "Scatterplot of X vs. Y", xlab = "X", ylab = "Y")
+```
+Based off the plot above, there seems to be a positive realationship between X and Y, and the pattern is rather linear.
+
+## (e)
+```{r}
+# Fit a least squares linear model
+model <- lm(Y ~ X)
+
+# Print the summary of the model
+summary(model)
+```
+
+The actual beta 0 was estimated at about -0.9745 while the actual beta 1 was estimated at about 0.5213. This is extremely close to the predicted beta values from earlier. Another thing to note from this model is that p-value for the relationship between x and y is extremely small thus meaning significance.

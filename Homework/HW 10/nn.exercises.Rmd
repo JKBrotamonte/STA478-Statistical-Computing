@@ -1,0 +1,319 @@
+---
+title: "NN_examples"
+output:
+  pdf_document: default
+  word_document: default
+date: "2022-11-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(nnet)
+library(reshape2)
+library(glmnet)
+```
+
+## NN for function approximation
+
+1. We will begin by investigating the behavior of a simple neural network trying to approximate a known function in the presence of noise. For this we will use the basic neural network package nnet, which provides the framework for applying a neural network with a single hidden layer to a dataframe.
+
+For this we will use the function:
+
+\begin{equation*}
+  y=\frac{1}{1+x^2} + x cos(5x) + \varepsilon
+\end{equation*}
+
+to generate some data. First, we define the function in R:
+
+```{r function}
+actual.fn <- function(x){ 1 / (1+x^2) + x*cos(5*x) }
+```
+
+Then we randomly sample 100 points from a uniform distribution from (-1,1) to create the x values of our training data.
+
+```{r sample}
+set.seed(3154)
+n <- 100
+x.train <- sort(runif(n,-1,1))
+```
+
+We will generate the y values with noise ($\varepsilon$) distributed as a normal random variable with mean 0 and standard deviation of 0.1. Once we have these we can plot the training data.
+
+```{r y values}
+y.train <- actual.fn(x.train) + rnorm(n, 0, 0.1)
+plot(x.train,y.train)
+```
+2. Now we will train our model on this data using the $\mathtt{nnet()}$ function.
+
+```{r model}
+model.nn <- nnet(x=x.train, y=y.train, size=16, linout=T, maxit=1000)
+```
+
+This will train a neural network with a single hidden layer of 16 neurons. The linout option is set to true because we want a regression model (this is false by default as neural networks are more commonly used in classification tasks). The maxit option represents the maximum number of times we would like the model to update the weights (the number of epochs), if it does not converge sooner. This package has a stopping mechanism, where if the loss stops improving, the model ends the training process and says that it has converged on the optimal values. Did your model converge? If not, does it converge if maxit is increased to 5000?
+
+
+3. Can you determine how many total parameters our neural network has?
+
+
+4. Now we will generate a vector of values to use as our test data and fit our trained model to.
+
+```{r test}
+x.test <- sort(runif(n,-1,1))
+```
+
+Because we know the underlying function, we can also generate the actual y values of the function at each instance and plot the correct curve for our reference.
+
+```{r test.plot}
+y.test <- actual.fn(x.test)
+plot(x.train, y.train)
+lines(x.test, y.test, col = "red")
+```
+
+Now we will use our trained model to make a prediction of our function.
+
+```{r predict}
+y.predict <- predict(model.nn, newdata=as.data.frame(x.test))
+plot(x.train, y.train)
+lines(x.test, y.test, col = "red")
+lines(x.test, y.predict, col="blue")
+```
+
+How well does your model fit the correct function? What does this indicate? What is the Mean Squared Error of your model?
+
+```{r MSE}
+mean((y.test - y.predict)^2)
+```
+
+
+5. Now let’s look at what happens if we increase the amount of noise in the data. We can generate new y values for our training data using a standard deviation of 0.4, and plot them again, along with the underlying function.
+
+```{r noisy.data}
+y.train.noisy <- actual.fn(x.train) + rnorm(n, 0, 0.4)
+plot(x.train,y.train.noisy)
+lines(x.test, y.test, col="red")
+```
+
+6. Repeating the process from part 2 above, we can fit a model to this new noisier data and use it to predict our function.
+
+```{r noisy.model}
+model.nn.noisy <- nnet(x=x.train, y=y.train.noisy, size=16, linout=T, maxit=5000)
+y.noisy.predict <- predict(model.nn.noisy, newdata=as.data.frame(x.test))
+plot(x.train, y.train)
+lines(x.test, y.test, col = "red")
+lines(x.test, y.noisy.predict, col="blue")
+```
+
+
+What does the function look like this time? Is it a better or worse fit? Is the MSE better or
+worse?
+
+```{r MSE.noisy}
+mean((y.test - y.noisy.predict)^2)
+```
+
+
+7. Our model is clearly overfitting heavily. In general we combat overfitting by decreasing the flexibility/complexity of the model. In the case of a neural network, one way there that we can reduce complexity is to reduce the number of neurons. Run the above models again but try to:
+(a) Reduce size to 4.
+(b) Reduce size to 2.
+
+Plot the output of the two networks; how do these two compare to each other?
+
+```{r noisy.model.small}
+model.nn.noisy <- nnet(x=x.train, y=y.train.noisy, size=2, linout=T, maxit=5000)
+y.noisy.predict <- predict(model.nn.noisy, newdata=as.data.frame(x.test))
+plot(x.train, y.train)
+lines(x.test, y.test, col = "red")
+lines(x.test, y.noisy.predict, col="blue")
+```
+
+8. Now let’s repeat the process for a third and final time but we’ll increase the amount of training data we learn the model on.
+
+```{r train.large}
+n.large <- 500
+x.train.large <- sort(runif(n.large,-1,1))
+y.train.large <- actual.fn(x.train.large) + rnorm(n.large, 0, 0.1)
+plot(x.train.large, y.train.large)
+lines(x.test, y.test, col="red")
+```
+
+What does the function look like this time? (Go back to the model with 16 neurons)
+
+```{r model.large}
+model.nn.large <- nnet(x=x.train.large, y=y.train.large, size=16, linout=T, maxit=10000)
+y.predict.large <- predict(model.nn.large, newdata=as.data.frame(x.test))
+plot(x.train.large, y.train.large)
+lines(x.test, y.test, col="red")
+lines(x.test, y.predict.large, col="blue")
+```
+
+Is it a better or worse fit? Is the MSE better or worse? 
+
+```{r MSE.large}
+mean((y.test - y.noisy.predict)^2)
+```
+
+What can does this indicate about the ability of neural networks?
+
+
+## Classification of the ZIP Code Digit Data
+
+Now that we have seen the strengths and weaknesses of Neural Networks as function approximators, we will use them in a multi-class classification setting, an environment where they have had much success. The dataset we will examine is a subset of a well known “MNIST” digits dataset. The full training data consists of over 7,000 examples of handwritten digits (0-9) that were scanned and prepared for use by the US postal system, with an accompanying testing dataset of around 2,000 individuals. The aim was to develop a classifier that could take the images of digits and detect which digit they represent; this would allow for automatic sorting of letters based on their ZIP code. Each data point is a 16 x 16 pixel grayscale image of a scanned handwritten digit, which has been labeled by hand.
+
+This is an example of a problem with a very high signal-to-noise ratio: there is very little noise in the dataset, as a human could differentiate the digits with close to 100% accuracy. The aim is to try and build a classifier with the highest possible accuracy, as every misclassified digit will lead to additional human intervention, which is expensive. Before we get started, please install and load the following packages:
+
+I have swapped around what was deemed the training and testing data in the original papers, the primary reason being that it reduces the size of the dataset to a more manageable level for our class. The file zip.train.csv contains our training data set of n = 2,007 images, and zip.test.csv contains a testing data set of n' = 7,291 images.
+
+1. Load the zip.train.csv file. The Digit column contains the label for each digit (Zero,One, etc.). The remaining 256 columns contain the 16x16 pixels that comprise the image. How many examples of each digit do we have in our training data?
+
+```{r load.explore.data}
+zip.train = read.csv("zip.train.csv", stringsAsFactors = TRUE)
+zip.test  = read.csv("zip.test.csv", stringsAsFactors = TRUE)
+table(zip.train$Digit)
+```
+
+2. Let us examine some of the features; pick a few random columns and histogram them. What do the histograms look like? Why do you think they have this appearance?
+
+```{r hist.digits}
+my.density.plot = function(x, xlabel = "", ylabel = "Density", no.hist = F, binwidth = NULL, bins = NULL)
+{
+  my.plot = ggplot(data=NULL, aes(x=x)) + xlab(xlabel) + ylab(ylabel)
+  if (!no.hist)
+  {
+    my.plot = my.plot + geom_histogram(aes(y=..density..), binwidth=binwidth, bins=bins, colour="black", fill="lightblue")
+  }
+  my.plot = my.plot + geom_density(size=1) + theme_bw()
+  my.plot
+}
+
+my.density.plot(zip.train[,30])
+# my.density.plot(zip.train[,60])
+# my.density.plot(zip.train[,156])
+# my.density.plot(zip.train[,210])
+
+```
+
+3. An interesting thing about this dataset is that we can literally visualize the feature, as they are components of images. Let us examine some of these digit images. The 256 columns store the pixels of each image; the first 16 columns comprise the first column of the image, columns 17 to 32 containing the second column of the image, and so on. Let us extract a row of the data and store it into a 16 x 16 matrix:
+
+```{r data row}
+X = matrix(as.numeric(zip.train[1,2:257]),nrow=16,ncol=16)
+```
+
+The $\mathtt{matrix()}$ function takes a vector and remaps it to a matrix of specified size. Examine the matrix X. The entries are between -1 (black) to 1 (pure white), with numbers in between representing levels of gray.
+
+Perhaps more interestingly, we can display the data directly as an image using the following $\mathtt{display.digit()}$ function.
+
+```{r display.digit.fn}
+display.digit <- function(one_digit)
+{
+  names(one_digit)[1] = "label"
+  for (i in 1:256)
+  {
+    names(one_digit)[i+1]=paste0("pixel",(i-1))
+  }
+
+  one_digit %>%
+    melt(id.vars = "label") %>%
+    mutate(pixel_value = gsub("pixel", "", variable),
+           pixel_value = as.numeric(pixel_value),
+           y.coord = -floor(pixel_value / 16),
+           x.coord = pixel_value %% 16) %>%
+    ggplot(aes(x = x.coord, y = y.coord, alpha = value))+
+    geom_tile() +
+    scale_alpha_continuous(range = c(0,1))
+}
+```
+
+Use that function to look at the image corresponding to row one:
+
+```{r digit}
+display.digit(zip.train[1,])
+```
+
+Have a look at the image; check to see that the label matches the digit for this example. Use this function to examine a few different digits in the training data to get a feel for what the data look like (literally).
+
+
+5. We first begin by fitting a linear model to the data to use as a reference. In this case we expect that a nonlinear method like a neural network should outperform a linear model but we can use the linear model as a benchmark. We can do this with glmnet by using multinomial regression (ie. family="multinomial"). The idea is essentially to have a logistic-type regression for each class, and learn a set of coefficients to predict each class relative to the other classes. To do this in glmnet use the code
+
+```{r linear.model}
+
+# wrapper for cv.glmnet
+cv.glmnet.f <- function(formula, data, ...)
+{
+  # Make sure the outcome variable is the first column
+  mf = model.frame(formula = formula, data = data)
+  t = terms.formula(formula, data=data)
+
+  # get the outcome
+  y = as.matrix(mf[,1])
+
+  # get the predictors and remove the intercept column
+  X = model.matrix(t, data=mf)
+  X = X[,-1]
+
+  fit <- cv.glmnet(X, y, ...)
+  fit$formula <- formula
+
+  return(fit)
+}
+```
+
+```{r lasso.fit}
+lasso.fit=cv.glmnet.f(Digit~., data=zip.train, family="multinomial", nfolds=10, alpha=1)
+```
+NOTE: Given the fact we are learning 10 lasso models by cross-validation, this can take a little while to fit.
+
+How well did the linear classifier work? Produce a confusion matrix to see which digits it has the most troubles with. How many misclassifications did it make?
+
+```{r glmnet.predict}
+
+# wrapper for predict.glmnet
+predict.glmnet.f <- function(fit, data, ...) {
+
+  # Make sure the outcome variable is the first column
+  mf = model.frame(formula = fit$formula, data = data)
+  t = terms.formula(fit$formula,data=data)
+
+  # get the predictors and remove the intercept column
+  X = model.matrix(t, data=mf)
+  X = X[,-1]
+
+  yhat <- predict(fit, X,  ...)
+
+  return(yhat)
+}
+```
+
+```{r lasso.predict}
+table(predict.glmnet.f(lasso.fit,zip.test,type="class"),zip.test$Digit)
+sum(diag(table(predict.glmnet.f(lasso.fit,zip.test,type="class"),zip.test$Digit)))/7291
+```
+
+
+6. Now let us try to improve our classification performance using a single layer neural network. We will first try a neural network with five neurons, plus the “skip-connections”, which essentially says to pass the inputs through directly into the output layer. This means our neural network will consist of a linear multinomial regression as before, plus a nonlinear component composed of five neurons, which can hopefully adapt to non-linearities in the data. To do this use:
+
+```{r first.NN}
+fit.nn = nnet(Digit~., data=zip.train, size=5, rang=0.1, decay=0, maxit=1e2, skip = T, MaxNWts=1e6)
+```
+
+The MaxNWts option overrides the built-in maximum size of the network (which was tuned for the 1990s) to allow us to use this “large” network. Once it has trained, let us see how well it has learned the training data. Use the table function above to show a confusion matrix for the predictions vs the actual digits.
+
+```{r first.NN.table}
+table(zip.train$Digit, predict(fit.nn, zip.train, type="class"))
+```
+
+How well has it fitted the training data? We can also see how well it generalizes onto the testing data. Use the same process as we did in 5 above to assess the test accuracy.
+
+```{r first.NN.test}
+sum(diag(table(zip.test$Digit, predict(fit.nn, zip.test, type="class"))))/7291
+table(zip.test$Digit, predict(fit.nn, zip.test, type="class"))
+```
+
+How well does this neural network model work on the testing data? Is it better than the linear model we trained before, and if not, why do you think it has performed worse? What digits does it have problems classifying?
+
+
+7.One of the weaknesses of neural networks in general is the lack of inferential tools to guide decisions like how many neurons to use and what degree of regularization to use. It is clear from the previous results that something needs to change, but what? Play around with the number of neurons (allowable non-linearities) and see if you can improve upon the previous model.
+
+```{r your.NN}
+# your NN here
+```

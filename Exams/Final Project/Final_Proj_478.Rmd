@@ -1,0 +1,378 @@
+---
+title: "Final"
+author: "Jared Brotamonte"
+date: "12/11/2023"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stats)
+library(dplyr)
+library(ggplot2)
+library(ModelMetrics)
+library(caret)
+library(MASS)
+library(patchwork)
+library(randomForest)
+library(mgcv)
+library(nnet)
+```
+
+# Introduction
+For this project, I decided to look into the topic of law enforcement and whether or not law enforecment truly targets minorities and people of color.
+  
+The difference in power when comparing law enforcement to the average citizen has always been hugely drastic. This imbalance of power has recently led to many conflicts arising between law enforcement and US citizens with the bases of these conflicts being that law enforcement has too much ability to abuse their power without enough concequences. In particular, I wanted to focus on claim that law enforcement abuses their power towards minorities or more specifically people of color.
+
+The data set I chose for this project is the "NYPD_Arrest_Data_2023" data set from kaggle.com. This data set provides information on the many arrests the new york police department made in the year 2023. This data set contains 18 differerent variables about each arrest made with a there being a mix of variables with numerical values and variables with character values.
+```{r}
+data <- read.csv("NYPD_Arrest_Data_2023.csv")
+summary(data)
+```
+# Data evaluation
+The data set contains 18 different variables that help describe each arrest. The arrest has a couple variables that are used to help keep track of the arrest like ARREST_KEY, PD_CD, and KY_CD. All of these variables contain the arrests ID's and codes that help keep track of the arrest. These variables will not be necassary for analyzing the data given the variables just contain the ID's and codes the government uses to organize the arrests, they won't be of much use, and even if codes and ID's repeat, it'd be hard to understand the meaning of these numbers.
+```{r}
+selected_columns <- c('ARREST_KEY', 'PD_CD', 'KY_CD')
+selected_data <- data[selected_columns]
+head(selected_data)
+```
+
+
+The data also contains information on the arrest itself. So this includes the ARREST_DATE, The PD_DESC which is the description based on the PD_CD, and the OFNS_DESC which is the description based on the KY_CD. The LAW_CODE which are the charges according to the NYS Penal law. The LAW_CAT_CD which is the level of offense, this has three catagories being felony(F), misdemeanor(M), and violation(V). The LAW_CODE will not be used due to it being confusing to understand, in the data set the LAW_CODE shows the actual number of the law without a description making it harder to understand whats going on. As for the description of the arrest, to keep things more clean I plan to only use one of the description variables thus I will be opting to utilize OFNS_DESC over PD_DESC because it's a more generalized and easier to understand.
+```{r}
+selected_columns <- c('PD_DESC', 'OFNS_DESC', 'LAW_CODE', 'LAW_CAT_CD')
+selected_data <- data[selected_columns]
+head(selected_data)
+```
+The data set also has a group of variables on when and where the arrest was as well as who was responsible for the arrest. It has information on the ARREST_DATE. It has the ARREST_BORRO which is the borough of the arrest with the catagories of the Bronx(B), Staten Island(S), Brooklyn(K), Manhattan(M), and Queens(Q), as well as the ARREST_PRECINT which has information on what precint the arrest occured in. The data set also has more specific variables explaining where the arrest occured through the X_COORD_CD and the Y_COORD_CD which are x and y coordinates based on the New York State Plane Coordinate System as well the Latitude and Longitude variables which are the coordinates based on the Global Coordinate System. The data set also has information on who actually performed the arrest with the variable JURISDICTION_CODE which is a code for the jurisdiction that performed the arrest with the catagories being 0-3 codes representing NYPD jurisdictions with Patrol(0), Transit(1), Housing(3), and codes above 3 represent non-NYPD jurisdictions. I will most likely not need the ARREST_PRECINT due to it's dificulty to understand. I will opted to use the Latitude and Longitude variables instead of the X_COORD_CD and Y_COORD_CD to keep things cleaner and because it's easier to pinpoint locations using latitude and longitude.
+```{r}
+selected_columns <- c('ARREST_DATE', 'ARREST_BORO', 'ARREST_PRECINCT', 'JURISDICTION_CODE',
+                      'X_COORD_CD', 'Y_COORD_CD', 'Latitude', 'Longitude')
+selected_data <- data[selected_columns]
+head(selected_data)
+```
+Lastly, the data set contains information on the perpetraters themselves. This inlcudes the AGE_GROUP the perpatrator is in, the perpatrators sex (PERP_SEX), and the perpatrators race(PERP_RACE). All of these variables will be useful when it comes to analyzing this data set.
+```{r}
+selected_columns <- c('AGE_GROUP', 'PERP_SEX', 'PERP_RACE')
+selected_data <- data[selected_columns]
+head(selected_data)
+```
+
+```{r}
+######################################################################
+# CLEAN THE DATA
+######################################################################
+
+# setup to use only the columns I plan to use
+selected_columns <- c('ARREST_DATE', 'OFNS_DESC', 'LAW_CAT_CD', 'ARREST_BORO', 'JURISDICTION_CODE', 'AGE_GROUP', 'PERP_SEX', 'PERP_RACE', 'Latitude', 'Longitude')
+data <- data[selected_columns]
+
+# Convert ARREST_DATE to Date format
+data$ARREST_DATE <- as.Date(data$ARREST_DATE, format = "%m/%d/%Y")
+
+# Check unique values in categorical variables
+sapply(data[, c("OFNS_DESC", "LAW_CAT_CD", "ARREST_BORO", "PERP_SEX", "PERP_RACE")], unique)
+
+# # Filter out invalid values in LAW_CAT_CD
+valid_law_cat <- c('F', 'M', 'V')
+data <- data[data$LAW_CAT_CD %in% valid_law_cat, ]
+
+# Check unique values in LAW_CAT_CD after filtering
+# should only print out 'F' 'M' and 'V'
+unique(data$LAW_CAT_CD)
+
+# change variables into factors
+data$LAW_CAT_CD <- as.factor(data$LAW_CAT_CD)
+data$ARREST_BORO <- as.factor(data$ARREST_BORO)
+data$AGE_GROUP <- as.factor(data$AGE_GROUP)
+data$PERP_SEX <- as.factor(data$PERP_SEX)
+data$PERP_RACE <- as.factor(data$PERP_RACE)
+
+
+# combine a bunch of the factors in OFNS_DESC to more generalized factors for less factors overall
+category_mapping <- c(
+  "FELONY ASSAULT" = "ASSAULT",
+  "DANGEROUS DRUGS" = "DRUGS",
+  "RAPE" = "SEX CRIMES",
+  "FORGERY" = "FRAUD",
+  "BURGLARY" = "BURGLARY",
+  "ARSON" = "ARSON",
+  "ASSAULT 3 & RELATED OFFENSES" = "ASSAULT",
+  "ROBBERY" = "ROBBERY",
+  "PETIT LARCENY" = "LARCENY",
+  "DANGEROUS WEAPONS" = "WEAPONS",
+  "MISCELLANEOUS PENAL LAW" = "OTHER PENAL LAW",
+  "HARRASSMENT 2" = "HARRASSMENT",
+  "OFF. AGNST PUB ORD SENSBLTY &" = "PUBLIC ORDER OFFENSES",
+  "JOSTLING" = "ASSAULT",
+  "SEX CRIMES" = "SEX CRIMES",
+  "FRAUDS" = "FRAUD",
+  "ESCAPE 3" = "ESCAPE",
+  "BURGLAR'S TOOLS" = "BURGLARY",
+  "VEHICLE AND TRAFFIC LAWS" = "TRAFFIC",
+  "OFFENSES AGAINST THE PERSON" = "OTHER OFFENSES",
+  "OFFENSES INVOLVING FRAUD" = "FRAUD",
+  "INTOXICATED & IMPAIRED DRIVING" = "TRAFFIC",
+  "OTHER OFFENSES RELATED TO THEF" = "OTHER OFFENSES",
+  "POSSESSION OF STOLEN PROPERTY" = "PROPERTY CRIME",
+  "OTHER TRAFFIC INFRACTION" = "TRAFFIC",
+  "GRAND LARCENY" = "LARCENY",
+  "CRIMINAL MISCHIEF & RELATED OF" = "OTHER OFFENSES",
+  "OTHER STATE LAWS (NON PENAL LA" = "OTHER OFFENSES",
+  "PROSTITUTION & RELATED OFFENSES" = "PROSTITUTION",
+  "GAMBLING" = "OTHER OFFENSES",
+  "CRIMINAL TRESPASS" = "TRESPASS",
+  "OFFENSES AGAINST PUBLIC ADMINI" = "PUBLIC ORDER OFFENSES",
+  "MURDER & NON-NEGL. MANSLAUGHTE" = "HOMICIDE",
+  "OTHER STATE LAWS" = "OTHER OFFENSES",
+  "CANNABIS RELATED OFFENSES" = "DRUGS",
+  "NYS LAWS-UNCLASSIFIED FELONY" = "OTHER OFFENSES",
+  "OFFENSES AGAINST PUBLIC SAFETY" = "PUBLIC ORDER OFFENSES",
+  "GRAND LARCENY OF MOTOR VEHICLE" = "LARCENY",
+  "UNAUTHORIZED USE OF A VEHICLE" = "TRAFFIC",
+  "ADMINISTRATIVE CODE" = "OTHER OFFENSES",
+  "OFFENSES RELATED TO CHILDREN" = "OTHER OFFENSES",
+  "THEFT-FRAUD" = "FRAUD",
+  "INTOXICATED/IMPAIRED DRIVING" = "TRAFFIC",
+  "ANTICIPATORY OFFENSES" = "OTHER OFFENSES",
+  "FRAUDULENT ACCOSTING" = "FRAUD",
+  "THEFT OF SERVICES" = "LARCENY",
+  "ENDAN WELFARE INCOMP" = "OTHER OFFENSES",
+  "OTHER STATE LAWS (NON PENAL LAW)" = "OTHER OFFENSES",
+  "ALCOHOLIC BEVERAGE CONTROL LAW" = "OTHER OFFENSES",
+  "DISORDERLY CONDUCT" = "DISORDERLY CONDUCT",
+  "KIDNAPPING & RELATED OFFENSES" = "KIDNAPPING",
+  "AGRICULTURE & MRKTS LAW-UNCLASSIFIED" = "OTHER OFFENSES",
+  "HOMICIDE-NEGLIGENT,UNCLASSIFIE" = "HOMICIDE",
+  "CHILD ABANDONMENT/NON SUPPORT" = "OTHER OFFENSES",
+  "KIDNAPPING" = "KIDNAPPING",
+  "UNLAWFUL POSS. WEAP. ON SCHOOL" = "WEAPONS",
+  "DISRUPTION OF A RELIGIOUS SERV" = "OTHER OFFENSES",
+  "HOMICIDE-NEGLIGENT-VEHICLE" = "HOMICIDE",
+  "FELONY SEX CRIMES" = "SEX CRIMES",
+  "ADMINISTRATIVE CODES" = "OTHER OFFENSES"
+)
+data$OFNS_DESC <- as.factor(category_mapping[as.character(data$OFNS_DESC)])
+
+str(data)
+
+# check if there is any NULL's in the data and clean them out
+sapply(data, function(x) sum(is.na(x)))
+data <- na.omit(data)
+
+summary(data)
+```
+
+# Modeling Introduction
+For this project I decided to implement a total of 4 models. I wanted to implement a Linear Discriminant Analysis(LDA) model, a Random Forest model, a lLogistic Regression model, and a Clustering model.
+
+Applying a Linear Discriminant Analysis (LDA) model to this dataset is advantageous, particularly when investigating the relationship between race and other variables. LDA works well with multivariate data and would work well with highlighting the differences between racial groups due to the various variables like offense type, age group, and arrest location. By using LDA, I can extract insights into how these variables collectively contribute to racial distribution in arrests. The model provides coefficients that signify the importance of each variable in distinguishing between racial categories important information in understanding the relationship between the various variables and the race of the perpatrator.
+```{r}
+######################################################################
+# LDA MODEL
+######################################################################
+# Remove last 100 observations for testing
+train_data <- data[1:(nrow(data) - 100), ]
+test_data <- data[(nrow(data) - 99):nrow(data), ]
+
+# Create a formula for the model
+lda_formula <- PERP_RACE ~ OFNS_DESC + LAW_CAT_CD + ARREST_BORO + AGE_GROUP + PERP_SEX + Latitude + Longitude
+
+# Fit the LDA model on the training data
+lda_model <- lda(lda_formula, data = train_data)
+
+# Project the data onto LD axes
+lda_projection <- predict(lda_model, newdata = test_data)
+
+# Display the projected data
+head(lda_projection$posterior)
+# This will show the posterior probabilities for each class based on LD projections
+
+# Make predictions on the test data
+lda_predictions <- predict(lda_model, newdata = test_data)$class
+# This will give you the predicted class labels
+
+# Compare predictions to actual values
+confusion_matrix <- table(lda_predictions, test_data$PERP_RACE)
+```
+
+The reason I did a Random Forest model is because a A Random Forest model is well-suited for examining the relationships within this dataset, especially concerning the impact of race on various variables. Its ability to handle diverse datasets and capture complex, nonlinear patterns makes it an effective choice. With factors like offense type, age group, and location influencing arrests, Random Forests can highlight variable importance and interactions. This model is particularly good at handling categorical variables, providing insights into the significance of each factor in predicting racial disparities in arrests.
+```{r}
+######################################################################
+# RANDOM FOREST MODEL
+######################################################################
+
+# Set the fraction of data to be held out
+# because data set is so large, use only about 100ish data points
+test_fraction <- 0.0006
+
+# Assuming your target variable is PERP_RACE
+set.seed(123)  # for reproducibility
+random_subset_rf <- sample.int(nrow(data), nrow(data) * test_fraction)
+data.train_rf <- data[-random_subset_rf, ]
+data.val_rf <- data[random_subset_rf, ]
+
+# Convert PERP_RACE to a factor
+data.train_rf$PERP_RACE <- factor(data.train_rf$PERP_RACE)
+data.val_rf$PERP_RACE <- factor(data.val_rf$PERP_RACE)
+
+# Fit random forest model
+rf.fit <- randomForest(PERP_RACE ~ ., data = data.train_rf, ntree = 25, importance = TRUE)
+
+# Predict on validation set
+rf.preds <- predict(rf.fit, data.val_rf)
+
+# Calculate the confusion matrix
+conf_matrix <- table(rf.preds, data.val_rf$PERP_RACE)
+
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+```
+
+A Multinomial Logistic Regression model is well-suited for this dataset because it accommodates for multiple categorical outcomes, making it apt for predicting diverse racial categories in arrest incidents. By estimating the probabilities of each race category, considering factors like offense type, age group, and arrest location, the model can explain the impact of each variable on the likelihood of a specific racial outcome. Its ability to examine interactions between predictors provides insights into nuanced relationships, enhancing the understanding of how various factors contribute to the racial distribution of arrests. Here is my Multinominal Logistic Regression model, I had to also implement the nnet package due to race having more than 2 factors. I also perform the cross-validation test in this model as well.
+```{r}
+######################################################################
+# MULTINOMINAL LOGISTIC REGRESSION
+######################################################################
+
+# Create vectors to store the accuracy values for each fold
+accuracy_list <- c()
+
+# Set the number of folds
+k <- 5
+
+# Shuffle the data so that the folds are effectively random
+data.shuffle <- data[sample(1:nrow(data)), ]
+
+# Loop through each fold
+for (fold in 1:k) {
+  
+  # Use the fold size to determine the validation set indexes
+  val_indexes <- c(((fold - 1) * round(nrow(data) * test_fraction) + 1):min(fold * round(nrow(data) * test_fraction), nrow(data)))
+  
+  # Define the train and validation sets
+  data.train <- data.shuffle[-val_indexes, ]
+  data.val <- data.shuffle[val_indexes, ]
+  
+  # Fit the multinomial logistic regression model
+  log_reg_fit <- multinom(PERP_RACE ~ ., data = data.train)
+  
+  # Predict on the validation set
+  predictions_log_reg <- predict(log_reg_fit, newdata = data.val, type = "probs")
+  
+  # Convert predicted probabilities to class labels
+  predicted_classes <- colnames(predictions_log_reg)[apply(predictions_log_reg, 1, which.max)]
+  
+  # Evaluate predictions and save the accuracy value
+  accuracy <- sum(predicted_classes == data.val$PERP_RACE) / nrow(data.val)
+  accuracy_list <- append(accuracy_list, accuracy)
+}
+
+# Calculate the mean accuracy across all folds
+mean_accuracy <- mean(accuracy_list)
+```
+
+I used a K-means clustering model because they are particularly good at understanding the relationship between race and other variables. By identifying natural clusters, this model provides insights into distinct arrest profiles, allowing for a more precise understanding of the potential associations and disparities across different groups in the dataset. In this model I decided to just focus on the clusters for the clustering of the 
+
+```{r}
+######################################################################
+# CLUSTERING  MODEL
+######################################################################
+# Filter data because the outliers can cause errors
+clustering_data <- data %>% 
+  filter(Latitude > quantile(data$Latitude, 0.05) & Latitude < quantile(data$Latitude, 0.95),
+         Longitude > quantile(data$Longitude, 0.05) & Longitude < quantile(data$Longitude, 0.95))
+
+# Assuming 'Latitude' and 'Longitude' are the columns representing coordinates
+coordinates <- clustering_data[, c('Latitude', 'Longitude')]
+
+# Standardize the data
+scaled_coordinates <- scale(coordinates)
+
+# Run K-Means clustering
+k <- 4  # Adjust the number of clusters based on your analysis
+km <- kmeans(scaled_coordinates, centers = k)
+
+# Add cluster information to your original data
+clustering_data$Cluster <- km$cluster
+
+# Plot pairs of variables
+clusters <- ggplot(clustering_data, aes(Latitude, Longitude, color = as.factor(Cluster))) +
+  geom_point(size = 3) +
+  theme_bw() +
+  theme(legend.title = element_blank())
+
+# Calculate centroids for black arrests
+centroids <- clustering_data %>%
+  group_by(Cluster) %>%
+  summarize(mean_latitude = mean(Latitude),
+            mean_longitude = mean(Longitude))
+
+# Plot pairs of variables for black arrests with centroids
+clusters_w_centroids <- clusters +
+  geom_point(data = centroids, aes(x = mean_latitude, y = mean_longitude),
+             color = "black", size = 5, shape = 4) +   # X shape
+  geom_label(data = centroids, aes(x = mean_latitude, y = mean_longitude,
+                                   label = paste("(", round(mean_latitude, 4), ", ", round(mean_longitude, 4), ")")),
+             color = "black", vjust = 1.4, hjust = 1) +  # Adjust label position
+  ggtitle("Clustering and Centroids")
+```
+The biggest limitation is that the data set as seen earlier mostly has catagorical variables, thus meaning most models are unusable or much harder to implement. Like in the case of Logistic regression, because PERP_RACE is has more than two factors, normal logistic regression couldn't be done and I had to resort to doing Multinominal Logistic Regression. Not only does it make the data harder to model, but also it makes it so that the results of the models are also a bit weirder to analyze and understand.
+
+# Analysis Results
+The Linear Discriminant Analysis (LDA) model was trained to predict the perpetrator's race based on various features such as offense description, arrest borough, age group, and geographic coordinates. The confusion matrix reveals the model's performance across different racial categories. Notably, the accuracy of the model is 45%, suggesting that it correctly predicted the perpetrator's race in 45% of cases. However, the Kappa value of 0.1149 indicates only slight agreement beyond what would be expected by chance. The model faces challenges in accurately predicting certain racial classes, as evidenced by varying sensitivities and low precision for specific groups. For instance, the sensitivity for the "BLACK" class is high (95.12%), but precision is relatively low (44.32%). Similar patterns are observed for other classes. The overall balanced accuracy is modest, reflecting the trade-off between sensitivity and specificity.
+
+Based on this analysis the variables can be seen as having an significant impact on the ability to determine a perpetrator's race. But because the sensitivity for the model guessing that the perpetrator would be black and only having a 44.32% success rate, one could make the claim that due to the majority of the arrests in the data being black, this could have skewed the results.
+```{r}
+# LDA analysis
+cat("Summary of LDA Model:", "\n")
+summary(lda_model)
+
+# print confusion matrix using caret package
+confusionMatrix(lda_predictions, test_data$PERP_RACE)
+```
+The Random Forest model research sheds light on the elements that influence the prediction of perpetrator race in criminal occurrences. ARREST_DATE, OFNS_DESC (offense description), and geographical information such as Latitude and Longitude can all be considered as significant contributors to the model's accuracy and impurity reduction. The time factor given by ARREST_DATE emphasizes the importance of arrest timing in predicting perpetrator race. Similarly, the type of offense (OFNS_DESC) is important, implying that certain offenses are associated with specific racial groups. Geographical characteristics indicate that the location of the arrest gives useful information for predicting perpetrator race.
+It's definitely important to note that although the type of offense and the location of the arrests may be helpful in predicting a perpetrator's race. It could also be said that instead its more so that the race of the perpetrator is the factor that can predict where the arrest was, and type of offense commited. Unfortunatly I did not do enough models to test this but in the future I would hope to do so.
+```{r}
+cat("Summary of Random Forest Model:", "\n")
+summary(rf.fit)
+
+cat("Importance:", "\n")
+importance((rf.fit))
+
+cat("VarImpPlot:", "\n")
+varImpPlot(rf.fit)
+
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# print accuracy
+print(paste("Accuracy: ", accuracy))
+```
+
+The multinomial logistic regression model aimed to predict the perpetrator's race (PERP_RACE) based on various predictor variables. The coefficients provide insights into the impact of each predictor on the log-odds of the response variable for different racial categories. Notably, the significance of coefficients was evaluated through standard errors, indicating the precision of estimates. The results suggest that variables such as the type of offense (OFNS_DESC), arrest date (ARREST_DATE), and jurisdiction code (JURISDICTION_CODE) play significant roles in predicting the perpetrator's race. The model's performance, assessed by the residual deviance and AIC, indicates a reasonably good fit to the data. However, attention should be given to large standard errors, suggesting potential issues of overfitting or multicollinearity. The multinomial logistic regression model was also cross-validated with k=5 folds, yielding a mean accuracy of 51.5%. Like the Random Forest model, this model found both the type of offense and the arrest date to be significant on predicting the perpetrators race, unlike the other model, this model seems to find that the jurisdiction code plays a significant role in predicting the perpetrators race. This could mean that the both the type of arrest and the arrest date do have an impact on the prediction of the perps arrest. Unfortunatly this does not help prove nor disprove the idea of cops unfairly abusing power towards minorities.
+```{r}
+summary(log_reg_fit)
+# Print the mean accuracy
+cat("\n", "Mean Accuracy:", mean_accuracy, "\n")
+```
+The cluster model, trained using the K-means function, looked into the various groupings that could be formed when looking at the latitudinal and longitudinal coordinates. The goal was to test if there were any clear "hotspots" of crime. This meant looking into the actual coordinates to see if the calculated centroids reflected anything in the data. Unfortunately with my limited knowledge about the Newyork streets and neighborhoods, most of the coordinates meant I knew nothing about. But interestingly, at least for the fourth centroid (40.82445, -73.91233) these coordinates led to a point in between Harlem and the Bronx, two places infamously known for being poorer areas. But because the data does not contain any information surrounding this topic it's harder to make any further assumptions.
+```{r}
+# Display the centroids for black arrests
+print(centroids)
+
+# print graph
+clusters_w_centroids
+```
+
+# Conclusions
+Overall, I feel that based off the data, it's mostly unknown if police do have tendencies to unfairly treat minorities. Unfortunately this data set seemed to not have specific enough information to answer such a question. This data set was probable more likely suited to analyze the future tendencies of crime and not the tendencies of the police themselves. Answering such a question through this data set alone also seems rather more difficult than simply searching out stories and examples of police brutality and hate crimes. But nonetheless this project was a real eyeopening experience to the actual capabilities data science and statics could have. It was eyeopening to realize that actual possibilities that data science could pursue, and in my eyes, I could see how through the use of data science people have the capability to help the world in a powerful way. In the future though, I will try to pick a data set that is more suited to answer my desired questions, and I will also pick a data set with variables that have mostly numerical values because the categorical variables were a pain to work around during this project, but now that I am more knowledged about categorical variables maybe it won't be as much of a problem for the future.
+\newpage
+
+# Citations
+Justin Pakzad. (2023, December). NYPD Arrests Dataset (2023), Version 1. Retrieved December 11, 2023 from https://www.kaggle.com/datasets/justinpakzad/nypd-arrests-2023-dataset/data.
+
+

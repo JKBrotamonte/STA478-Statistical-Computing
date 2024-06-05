@@ -1,0 +1,151 @@
+---
+title: "STA 478 Assingment 1"
+author: "Jared Brotamonte"
+date: "8/29/2023"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(rstudioapi)
+library(MASS)
+```
+
+# Exercise 1
+```{r}
+# (a)
+setwd("C:/Users/jkbro/OneDrive/Desktop/STA 478/Homework/HWK 1")
+load("compstats1.Rdata")
+ls()
+print(ages)
+
+# (b)
+ageLevels <- function(age){
+  if(age < 18){
+    return("Minor")
+  }
+  else{
+    return("Adult")
+  }
+}
+ageLevels <- factor(sapply(ages, ageLevels), levels = c("Minor","Adult"))
+print(ageLevels)
+agesOrdered <- ages[order(ageLevels)]
+print(agesOrdered)
+```
+
+# Exercise 2
+```{r}
+# (a)
+data("ChickWeight")
+
+# (b)
+ChickFiltered <- ChickWeight[ChickWeight$Time %in% c(10, 20), ]
+head(ChickFiltered)
+
+# (c)
+FilteredMeanAndSD <- ChickFiltered %>%
+  group_by(Diet, Time) %>%
+  summarise(mean_weight = mean(weight), sd_weight = sd(weight))
+
+print(FilteredMeanAndSD)
+```
+
+
+# Exercise 3
+```{r}
+# (a)
+Survey <- read.csv("https://www.lock5stat.com/datasets3e/StudentSurvey.csv",
+                   na.strings=c(""," ")) %>%
+  mutate(Year = factor(Year,
+                       levels=c("FirstYear","Sophomore","Junior","Senior"))) %>%
+  mutate(Sex = factor(Sex))
+
+# (b)
+SurveyCounts <- Survey %>%
+  filter(!is.na(Year)) %>%
+  group_by(Year, Sex) %>%
+  summarise(response_count = n())
+
+print(SurveyCounts)
+
+# (c)
+SurveyTable <- SurveyCounts %>%
+  pivot_wider(names_from = Year, values_from = response_count)
+print(SurveyTable)
+```
+
+
+# Exercise 4
+```{r}
+# (a)
+# Loaded MASS at the beginning of session
+
+# (b)
+birthwt <- birthwt %>%
+  mutate(race = factor(race, labels=c("White","Black","Other")),
+         smoke = factor(smoke, labels=c("No Smoke", "Smoke")))
+
+# (c)
+ggplot(data = birthwt, aes(x = bwt)) +
+  geom_histogram(binwidth = 100, fill = "skyblue", color = "black")+
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Frequency")
+
+# (d)
+ggplot(data = birthwt, aes(x = bwt)) +
+  geom_histogram(binwidth = 100, fill = "skyblue", color = "black")+
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Frequency")+
+  facet_grid(smoke ~.)
+
+# (e)
+ggplot(data = birthwt, aes(x = bwt)) +
+  geom_histogram(binwidth = 100, fill = "skyblue", color = "black")+
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Frequency")+
+  facet_grid(smoke ~ race)
+
+# (f)
+ggplot(data = birthwt, aes(x = bwt, y = ..density..)) +
+  geom_histogram(binwidth = 100, fill = "skyblue", color = "black") +
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Density")+
+  facet_grid(smoke ~.)
+
+# (g)
+ggplot(data = birthwt, aes(x = bwt, y = ..density..)) +
+  geom_histogram(binwidth = 100, fill = "skyblue", color = "black") +
+  geom_density(aes(color = "red"), size = 1) +
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Density")+
+  facet_grid(smoke ~.)
+
+# (h)
+ggplot(data = birthwt, aes(x = bwt, y = ..density..)) +
+  geom_histogram(binwidth = 100, fill = "cornsilk", color = "grey60") +
+  geom_density(aes(color = "red"), size = 1) +
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Density")+
+  facet_grid(smoke ~.)
+
+# (i)
+ggplot(data = birthwt, aes(x = bwt, y = ..density..)) +
+  geom_density(aes(color = "red"), size = 1) +
+  geom_histogram(binwidth = 100, fill = "cornsilk", color = "grey60") +
+  labs(title = "Histogram of Birthweights",
+       x = "Birthweight",
+       y = "Density")+
+  facet_grid(smoke ~.)
+```
+For part(i) of question 4, the order does matter. Personally I prefer doing the histogram first then the density line because it looks cleaner and is easier to see the smooth density throughout the data.

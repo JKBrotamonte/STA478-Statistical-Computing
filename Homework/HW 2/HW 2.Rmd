@@ -1,0 +1,154 @@
+---
+title: "STA 478 HW 2"
+author: "Jared Brotamonte"
+date: "9/13/2023"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exercise 1
+
+## (a)
+
+```{r}
+setwd("C:/Users/jkbro/OneDrive/Desktop/STA 478/Homework/HW 2")
+library(caret)
+library(readr)
+
+# read in data
+wine_data <- read.csv("C:/Users/jkbro/OneDrive/Desktop/STA 478/Homework/HW 2/wine.csv")
+head(wine_data)
+
+# set aside 17th row to estimate
+wine_to_predict <- wine_data[17, ]
+
+# remove 17th row
+wine_data <- wine_data[-17, ]
+
+# perform knn with k=3
+k_val <- 3
+knn_model <- knn3(quality ~., data = wine_data, k = k_val)
+
+# predict quality
+predicted <- predict(knn_model, wine_to_predict)
+predicted
+```
+
+## (b)
+
+```{r}
+# do same for k-15
+k_val <- 15
+knn_model <- knn3(quality ~ ., data = wine_data, k = k_val)
+
+# predict quality
+predicted <- predict(knn_model, wine_to_predict)
+predicted
+```
+
+## (c)
+
+```{r}
+# Find actual quality
+actual <- wine_to_predict$quality
+actual
+```
+
+# Exercise 2
+
+```{r}
+# load libraries
+library(ISLR2)
+data("Default")
+```
+
+## (a)
+
+```{r}
+# filter to keep only students
+students_data <- Default[Default$student == "Yes",]
+head(students_data)
+```
+
+## (b)
+
+```{r}
+library(ggplot2)
+ggplot(data = students_data, aes(x = income, y = balance, color = default)) +
+  geom_point() +
+  scale_color_manual(values = c("No" = "blue", "Yes" = "red")) +
+  labs(x = "Income", y = "Balance") +
+  ggtitle("Scatter Plot of Balance vs. Income (Colored by Default Status)")
+```
+
+It's hard to deduce any information from this plot because it is so cluttered.
+
+## (c)
+
+```{r}
+# Define the test instance
+test_instance <- data.frame(income = 18000, balance = 1900)
+
+# perform knn with k=11
+k_val <- 11
+knn_model <- knn3(default ~ income + balance, data = students_data, k=k_val)
+knn_model
+
+predicted <- predict(knn_model,newdata = test_instance)
+
+# Create a dataframe for plotting
+plot_data <- data.frame(income = students_data$income, balance = students_data$balance, Default = students_data$default)
+
+# Create a scatter plot
+ggplot(data = plot_data, aes(x = balance, y = income, color = Default)) +
+  geom_point() +
+  geom_point(data = test_instance, aes(x = balance, y = income), color = "black", size = 3, shape = 4) +
+  scale_color_manual(values = c("No" = "blue", "Yes" = "red")) +
+  labs(x = "Balance", y = "Income") +
+  ggtitle(paste("KNN Model with k =", k_val, "Prediction:", predicted))
+```
+
+```{r}
+# perform knn with k=55
+k_val <- 55
+knn_model <- knn3(default ~ income + balance, data = students_data, k=k_val)
+knn_model
+
+predicted <- predict(knn_model,newdata = test_instance)
+
+# Create a dataframe for plotting
+plot_data <- data.frame(income = students_data$income, balance = students_data$balance, Default = students_data$default)
+
+# Create a scatter plot
+ggplot(data = plot_data, aes(x = balance, y = income, color = Default)) +
+  geom_point() +
+  geom_point(data = test_instance, aes(x = balance, y = income), color = "black", size = 3, shape = 4) +
+  scale_color_manual(values = c("No" = "blue", "Yes" = "red")) +
+  labs(x = "Balance", y = "Income") +
+  ggtitle(paste("KNN Model with k =", k_val, "Prediction:", predicted))
+```
+
+## (d)
+
+```{r}
+# repeate with k-55
+k_val <- 55
+knn_model <- knn3(default ~ income + balance, data = students_data, k=k_val)
+knn_model
+
+ggplot() +
+  geom_point(data = students_data, aes(x = income, y = balance, color = default)) +
+  geom_point(data = test_instance, aes(x = income, y = balance, color = knn_model$class)) +
+  scale_color_manual(values = c("No" = "blue", "Yes" = "red")) +
+  labs(x = "Income", y = "Balance") +
+  ggtitle("KNN Classification with k = 55")
+```
+
+## (e)
+
+The k-55 should be the more flexible model thus having a variance while the k-11 would be less flexible and have a higher bias.

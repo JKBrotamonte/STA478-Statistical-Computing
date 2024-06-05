@@ -1,0 +1,152 @@
+---
+title: "HW_9"
+author: "Jared Brotamonte"
+date: "11/29/2023"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stats)
+library(patchwork)
+```
+
+# Exercise 1
+
+## (a)
+```{r}
+data <- data.frame(
+  Obs = 1:6,
+  X1 = c(1, 1, 0, 5, 6, 4),
+  X2 = c(4, 3, 4, 1, 2, 0)
+)
+
+# Plot the observations
+ggplot(data, aes(X1, X2)) +
+  geom_point(size = 3) +
+  geom_text(aes(label = Obs), vjust = 1.5, hjust = -0.5) +  # Add labels for each observation
+  labs(title = "Scatter Plot of Observations", x = "X1", y = "X2") +
+  theme_bw()
+```
+
+## (b)
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Number of clusters (K)
+K <- 2
+
+# Randomly assign cluster labels to each observation
+data$cluster <- sample(1:K, nrow(data), replace = TRUE)
+data$cluster = as.factor(data$cluster)
+head(data)
+```
+
+## (c)
+```{r}
+centroids <- data %>%
+    group_by(cluster) %>%
+    summarize(mean.X1 = mean(X1), mean.X2 = mean(X2))
+centroids
+```
+
+## (d)
+```{r}
+# check which centroid each observation is closest to and assign it to that cluster
+for(i in 1:nrow(data)){
+  dist_1 <- sqrt((data$X1[i]-centroids$mean.X1[1])^2 + (data$X2[i]-centroids$mean.X2[1])^2)
+  dist_2 <- sqrt((data$X1[i]-centroids$mean.X1[2])^2 + (data$X2[i]-centroids$mean.X2[2])^2)
+  if(dist_1==min(c(dist_1,dist_2))){
+    print("assign to cluster 1")
+    data$cluster[i] <- 1
+  } else{
+    print("assign to cluster 2")
+    data$cluster[i] <- 2
+  }
+}
+```
+
+## (e)
+```{r}
+# Initialize a variable to track changes
+changes <- TRUE
+
+# Initialize previous_assigned_cluster
+previous_assigned_cluster <- data$assigned_cluster
+
+# Repeat (c) and (d) until the answers stop changing
+while (changes) {
+  # Step (c) - Compute the centroid for each cluster
+  centroids <- data %>%
+    group_by(cluster) %>%
+    summarize(mean.X1 = mean(X1), mean.X2 = mean(X2))
+
+  # Step (d) - Assign each observation to the centroid to which it is closest
+  for(i in 1:nrow(data)){
+    dist_1 <- sqrt((data$X1[i]-centroids$mean.X1[1])^2 + (data$X2[i]-centroids$mean.X2[1])^2)
+    dist_2 <- sqrt((data$X1[i]-centroids$mean.X1[2])^2 + (data$X2[i]-centroids$mean.X2[2])^2)
+    
+    if(dist_1 == min(c(dist_1, dist_2))){
+      print("assign to cluster 1")
+      data$assigned_cluster[i] <- 1
+    } else {
+      print("assign to cluster 2")
+      data$assigned_cluster[i] <- 2
+    }
+  }
+
+  # Check if the assigned clusters have changed
+  changes <- any(previous_assigned_cluster != data$assigned_cluster)
+  
+  # Update previous_assigned_cluster for the next iteration
+  previous_assigned_cluster <- data$assigned_cluster
+}
+
+# Display the final assigned clusters
+print(data$assigned_cluster)
+```
+
+## (f)
+```{r}
+# Plot the observations
+ggplot(data, aes(X1, X2, color=cluster)) +
+  geom_point(size = 3) +
+  geom_text(aes(label = Obs), vjust = 1.5, hjust = -0.5) +  # Add labels for each observation
+  labs(title = "Scatter Plot of Observations", x = "X1", y = "X2") +
+  theme_bw()+
+  geom_point(data=centroids,
+             mapping=aes(mean.X1, mean.X2),
+             size=6, shape=4)
+```
+
+# Exercise 2
+
+## (a)
+```{r}
+file_path <- "C:/Users/jkbro/OneDrive/Desktop/STA 478/Homework/HW 9/Ch12Ex13.csv"
+
+# Load the data using read.csv()
+gene_data <- read.csv(file_path)
+
+# Display the structure of the loaded data
+head(gene_data)
+```
+
+## (b)
+```{r}
+# Extract gene expression data
+gene_expr_data <- gene_data[, 2:ncol(gene_data)]
+
+# Calculate Euclidean distances
+distances <- dist(gene_expr_data)
+
+# Apply hierarchical clustering using single linkage
+hclust <- hclust(distances, method = "single")
+
+plot(hclust, main = "Hierarchical Clustering Dendrogram", xlab = "Samples")
+```
+
